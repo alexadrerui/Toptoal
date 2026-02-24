@@ -1,0 +1,23 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "piloto_sao_paulo_centro"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-46.67, -23.58],
+            [-46.62, -23.58],
+            [-46.62, -23.53],
+            [-46.67, -23.53],
+            [-46.67, -23.58]
+          ]
+        ]
+      }
+    }
+  ]
+}
