@@ -1,0 +1,11 @@
+{
+  "max_dem_nodata_ratio": 0.15,
+  "require_projected_crs": false,
+  "min_osm_feature_count": 10,
+  "max_invalid_geometry_ratio": 0.05,
+  "require_thematic_layers": {
+    "roads": true,
+    "water": true,
+    "buildings": true
+  }
+}

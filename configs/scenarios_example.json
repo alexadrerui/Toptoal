@@ -1,0 +1,24 @@
+{
+  "scenarios": [
+    {
+      "id": "base",
+      "overrides": {
+        "terrain_cost_flat": 1,
+        "water_cost": 15,
+        "existing_road_cost": 0.6
+      },
+      "stride": 2,
+      "vertical_penalty_factor": 0.05
+    },
+    {
+      "id": "conservador_agua",
+      "overrides": {
+        "terrain_cost_flat": 1,
+        "water_cost": 20,
+        "existing_road_cost": 0.6
+      },
+      "stride": 2,
+      "vertical_penalty_factor": 0.08
+    }
+  ]
+}

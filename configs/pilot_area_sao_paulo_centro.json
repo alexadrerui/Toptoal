@@ -1,0 +1,16 @@
+{
+  "name": "piloto_sao_paulo_centro",
+  "description": "Área piloto inicial para validação do pipeline OSM+DEM e custo de superfície.",
+  "crs": "EPSG:4326",
+  "bbox": {
+    "west": -46.67,
+    "south": -23.58,
+    "east": -46.62,
+    "north": -23.53
+  },
+  "notes": [
+    "Área urbana com presença de hidrografia canalizada e alta densidade de construções.",
+    "Boa para validar penalidade de construções e comportamento de declividade inicial.",
+    "Depois ampliar para corredor periurbano para testes de ponte/contorno."
+  ]
+}
