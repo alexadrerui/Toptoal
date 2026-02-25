@@ -1,9 +1,10 @@
 {
   "name": "Corredor piloto 50 km - Etapa Dados e Terreno",
   "polygon_geojson": "data/external/pilot_corridor_50km_sp.geojson",
-  "dem_type": "COP30",
+  "open_topography_supported_resolutions_m": [15, 30, 90],
+  "dem_type_default": "COP30",
+  "dem_resolution_m_default": 30,
   "expected_length_km": 50,
   "recommended_stride": 2,
-  "assumed_dem_resolution_m": 30,
   "notes": "Protótipo para aquisição e estruturação inicial dos dados brutos em corredor curto para calibração de custos."
 }

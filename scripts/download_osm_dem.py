@@ -21,6 +21,30 @@ from urllib.request import Request, urlopen
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 OPENTOPO_URL = "https://portal.opentopography.org/API/globaldem"
 
+
+SUPPORTED_DEM_RESOLUTIONS = {
+    "15": "COP30",
+    "30": "COP30",
+    "90": "SRTMGL3",
+}
+
+
+def _resolve_dem_type(dem_type: str | None, dem_resolution_m: int | None) -> tuple[str, int | None]:
+    if dem_resolution_m is not None:
+        if str(dem_resolution_m) not in SUPPORTED_DEM_RESOLUTIONS:
+            raise ValueError("--dem-resolution-m deve ser um destes valores: 15, 30, 90")
+        return SUPPORTED_DEM_RESOLUTIONS[str(dem_resolution_m)], int(dem_resolution_m)
+
+    chosen = (dem_type or "COP30").strip().upper()
+    aliases = {
+        "COP30": ("COP30", 30),
+        "SRTMGL1": ("SRTMGL1", 30),
+        "SRTMGL3": ("SRTMGL3", 90),
+    }
+    if chosen in aliases:
+        return aliases[chosen]
+    return chosen, None
+
 try:
     import rasterio
     from rasterio.mask import mask
@@ -189,7 +213,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Baixa OSM + DEM por polígono GeoJSON.")
     parser.add_argument("--polygon", required=True, type=Path, help="GeoJSON (Polygon/MultiPolygon).")
     parser.add_argument("--out-dir", type=Path, default=Path("data/raw"), help="Diretório base de saída.")
-    parser.add_argument("--dem-type", default="COP30", help="DEM OpenTopography (ex.: COP30, SRTMGL1).")
+    parser.add_argument("--dem-type", default="COP30", help="DEM OpenTopography (ex.: COP30, SRTMGL1, SRTMGL3).")
+    parser.add_argument("--dem-resolution-m", type=int, default=None, help="Escolha por resolução alvo: 15, 30 ou 90 metros.")
     parser.add_argument("--opentopo-api-key", default=None, help="API key do OpenTopography.")
     parser.add_argument("--skip-dem", action="store_true", help="Baixa apenas OSM.")
     parser.add_argument("--skip-osm", action="store_true", help="Baixa apenas DEM.")
@@ -210,11 +235,15 @@ def main() -> None:
     bbox = _geometry_bounds(geometry)
     query_preview = _build_overpass_poly_query(geometry)
 
+    resolved_dem_type, resolved_resolution = _resolve_dem_type(args.dem_type, args.dem_resolution_m)
+
     metadata = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "polygon_source": str(args.polygon),
         "bbox": {"west": bbox[0], "south": bbox[1], "east": bbox[2], "north": bbox[3]},
-        "dem_type": args.dem_type,
+        "dem_type": resolved_dem_type,
+        "dem_resolution_m": resolved_resolution,
+        "supported_dem_resolutions_m": [15, 30, 90],
     }
     _write_json(meta_dir / "request_metadata.json", metadata)
     _write_json(meta_dir / "input_polygon.geojson", {"type": "Feature", "properties": {}, "geometry": geometry})
@@ -245,7 +274,7 @@ def main() -> None:
     dem_clip = dem_dir / "dem_clipped_polygon.tif"
 
     print("[2/2] Baixando DEM por bbox...")
-    download_dem_bbox(bbox, dem_bbox, args.dem_type, api_key)
+    download_dem_bbox(bbox, dem_bbox, resolved_dem_type, api_key)
 
     if args.skip_dem_clip:
         print("Recorte de DEM ignorado (--skip-dem-clip).")

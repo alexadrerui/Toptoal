@@ -131,7 +131,7 @@ Script: `scripts/download_osm_dem.py`
 ### Comandos
 
 ```bash
-python scripts/download_osm_dem.py   --polygon data/external/area.geojson   --out-dir data/raw   --dem-type COP30   --opentopo-api-key "SUA_CHAVE"
+python scripts/download_osm_dem.py   --polygon data/external/area.geojson   --out-dir data/raw   --dem-type COP30   --dem-resolution-m 30   --opentopo-api-key "SUA_CHAVE"
 ```
 
 Somente OSM:
@@ -142,8 +142,10 @@ python scripts/download_osm_dem.py --polygon data/external/area.geojson --skip-d
 
 Somente DEM (útil quando Overpass estiver indisponível):
 
+Resoluções suportadas no OpenTopography neste projeto: **15m, 30m e 90m** (via `--dem-resolution-m`).
+
 ```bash
-python scripts/download_osm_dem.py --polygon data/external/area.geojson --skip-osm --opentopo-api-key "SUA_CHAVE"
+python scripts/download_osm_dem.py --polygon data/external/area.geojson --skip-osm --dem-resolution-m 15 --opentopo-api-key "SUA_CHAVE"
 ```
 
 Também é possível usar variável de ambiente para a chave:
@@ -479,13 +481,13 @@ Para reduzir risco e calibrar custos rapidamente, foi incluído um corredor pilo
 Execução recomendada (sem rede, para validar estrutura e estimar grade):
 
 ```bash
-python scripts/run_data_terrain_prototype.py
+python scripts/run_data_terrain_prototype.py --dem-resolution-m 30
 ```
 
 Execução com download real de dados:
 
 ```bash
-python scripts/run_data_terrain_prototype.py --run-download
+python scripts/run_data_terrain_prototype.py --dem-resolution-m 30 --run-download
 ```
 
 O relatório gerado em `outputs/reports/data_terrain_prototype_50km.json` inclui:
@@ -498,8 +500,23 @@ O relatório gerado em `outputs/reports/data_terrain_prototype_50km.json` inclui
 No modelo atual, o tamanho da grade é definido por:
 
 - `tamanho_grade_m = resolução_do_DEM * stride`
+- resolução DEM selecionável: **15m / 30m / 90m** (`--dem-resolution-m`)
 - `stride` padrão em `build_grid_model.py` é **2**.
 
 Exemplo prático:
 - Com DEM de 30 m (COP30) e `stride=2`, a grade efetiva fica em **60 m**.
-- Com DEM de 5 m e `stride=2`, a grade efetiva fica em **10 m**.
+- Com DEM de 15 m e `stride=2`, a grade efetiva fica em **30 m**.
+
+
+### Escolha de resolução (15m/30m/90m)
+
+No `download_osm_dem.py`, você pode escolher explicitamente a resolução:
+
+```bash
+python scripts/download_osm_dem.py \
+  --polygon data/external/pilot_corridor_50km_sp.geojson \
+  --dem-resolution-m 15 \
+  --opentopo-api-key "SUA_CHAVE"
+```
+
+Troque para `30` ou `90` para comparar velocidade/nível de detalhe e calibrar o modelo.

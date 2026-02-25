@@ -26,11 +26,12 @@ def parse_args() -> argparse.Namespace:
         help="Diretório de saída da ingestão OSM+DEM.",
     )
     parser.add_argument("--dem-type", type=str, default="COP30")
+    parser.add_argument("--dem-resolution-m", type=int, default=30, choices=[15, 30, 90], help="Resolução alvo do DEM no OpenTopography.")
     parser.add_argument("--stride", type=int, default=2, help="Stride da grade de processamento.")
     parser.add_argument(
         "--assumed-dem-resolution-m",
         type=float,
-        default=30.0,
+        default=None,
         help="Resolução DEM assumida para estimativa da grade (metros).",
     )
     parser.add_argument(
@@ -70,7 +71,7 @@ def _haversine_km(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
     return 2 * r * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-def _run_ingestion(polygon: Path, out_dir: Path, dem_type: str, run_download: bool) -> dict[str, str]:
+def _run_ingestion(polygon: Path, out_dir: Path, dem_type: str, dem_resolution_m: int, run_download: bool) -> dict[str, str]:
     cmd = [
         "python",
         "scripts/download_osm_dem.py",
@@ -80,6 +81,8 @@ def _run_ingestion(polygon: Path, out_dir: Path, dem_type: str, run_download: bo
         str(out_dir),
         "--dem-type",
         dem_type,
+        "--dem-resolution-m",
+        str(dem_resolution_m),
     ]
     mode = "download"
     if not run_download:
@@ -106,11 +109,12 @@ def main() -> None:
     length_km = _haversine_km(west, mid_lat, east, mid_lat)
     width_km = _haversine_km(west, south, west, north)
 
-    effective_grid_m = args.assumed_dem_resolution_m * args.stride
+    assumed_dem_resolution_m = float(args.assumed_dem_resolution_m) if args.assumed_dem_resolution_m is not None else float(args.dem_resolution_m)
+    effective_grid_m = assumed_dem_resolution_m * args.stride
     length_cells = max(1, int((length_km * 1000.0) / effective_grid_m))
     width_cells = max(1, int((width_km * 1000.0) / effective_grid_m))
 
-    ingestion = _run_ingestion(args.polygon, args.out_dir, args.dem_type, args.run_download)
+    ingestion = _run_ingestion(args.polygon, args.out_dir, args.dem_type, args.dem_resolution_m, args.run_download)
 
     report = {
         "prototype": "dados_terreno_50km",
@@ -123,7 +127,8 @@ def main() -> None:
         },
         "processing_grid": {
             "stride": args.stride,
-            "assumed_dem_resolution_m": args.assumed_dem_resolution_m,
+            "assumed_dem_resolution_m": assumed_dem_resolution_m,
+            "selected_dem_resolution_m": args.dem_resolution_m,
             "effective_grid_size_m": effective_grid_m,
             "estimated_cells_length": length_cells,
             "estimated_cells_width": width_cells,
