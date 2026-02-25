@@ -5,6 +5,6 @@
   "dem_type_default": "COP30",
   "dem_resolution_m_default": 30,
   "expected_length_km": 50,
-  "recommended_stride": 2,
+  "recommended_stride": 15,
   "notes": "Protótipo para aquisição e estruturação inicial dos dados brutos em corredor curto para calibração de custos."
 }

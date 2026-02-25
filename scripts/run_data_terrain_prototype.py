@@ -27,7 +27,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--dem-type", type=str, default="COP30")
     parser.add_argument("--dem-resolution-m", type=int, default=30, choices=[15, 30, 90], help="Resolução alvo do DEM no OpenTopography.")
-    parser.add_argument("--stride", type=int, default=2, help="Stride da grade de processamento.")
+    parser.add_argument("--stride", type=int, default=15, help="Stride da grade de processamento (padrão 15x15).")
     parser.add_argument(
         "--assumed-dem-resolution-m",
         type=float,

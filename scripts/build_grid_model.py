@@ -26,7 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dem", required=True, type=Path, help="DEM recortado (GeoTIFF).")
     parser.add_argument("--cost-raster", type=Path, default=None, help="Raster de custo de superfície (opcional).")
     parser.add_argument("--out", type=Path, default=Path("data/interim/grid_model.json"), help="Saída JSON da grade.")
-    parser.add_argument("--stride", type=int, default=2, help="Amostragem da grade (2 = blocos 2x2).")
+    parser.add_argument("--stride", type=int, default=15, help="Amostragem da grade (15 = blocos 15x15).")
     parser.add_argument(
         "--vertical-penalty-factor",
         type=float,

@@ -168,7 +168,7 @@ python scripts/download_osm_dem.py --polygon data/external/area.geojson --dry-ru
 - `data/raw/dem/dem_clipped_polygon.tif`
 - `data/raw/metadata/request_metadata.json`
 
-## 10) Estrutura em memória para o algoritmo: grade 2x2
+## 10) Estrutura em memória para o algoritmo: grade 15x15
 
 Sim — dividir a área em grade de pequenos quadrados é uma estratégia muito prática para iniciar o cálculo de rota.
 
@@ -180,10 +180,10 @@ Script: `scripts/build_grid_model.py`
   - arestas 8-direções com custo de movimento.
 - Custo de aresta:
   - `horizontal_distance_m * thematic_cost_mean + vertical_penalty_factor * vertical_delta_m`
-- `--stride 2` representa amostragem em blocos 2x2 para reduzir volume inicial.
+- `--stride 15` representa amostragem em blocos 15x15 para reduzir volume inicial.
 
 ```bash
-python scripts/build_grid_model.py   --dem data/raw/dem/dem_clipped_polygon.tif   --cost-raster data/interim/cost_surface.tif   --out data/interim/grid_model.json   --stride 2   --vertical-penalty-factor 0.05
+python scripts/build_grid_model.py   --dem data/raw/dem/dem_clipped_polygon.tif   --cost-raster data/interim/cost_surface.tif   --out data/interim/grid_model.json   --stride 15   --vertical-penalty-factor 0.05
 ```
 
 
@@ -257,7 +257,7 @@ python scripts/build_cost_surface.py \
 python scripts/build_grid_model.py \
   --dem data/raw/dem/dem_clipped_polygon.tif \
   --out data/interim/grid_model.json \
-  --stride 2
+  --stride 15
 ```
 
 ### Criar outra área piloto rapidamente
@@ -501,11 +501,11 @@ No modelo atual, o tamanho da grade é definido por:
 
 - `tamanho_grade_m = resolução_do_DEM * stride`
 - resolução DEM selecionável: **15m / 30m / 90m** (`--dem-resolution-m`)
-- `stride` padrão em `build_grid_model.py` é **2**.
+- `stride` padrão em `build_grid_model.py` é **15**.
 
 Exemplo prático:
-- Com DEM de 30 m (COP30) e `stride=2`, a grade efetiva fica em **60 m**.
-- Com DEM de 15 m e `stride=2`, a grade efetiva fica em **30 m**.
+- Com DEM de 30 m (COP30) e `stride=15`, a grade efetiva fica em **450 m**.
+- Com DEM de 15 m e `stride=15`, a grade efetiva fica em **225 m**.
 
 
 ### Escolha de resolução (15m/30m/90m)
