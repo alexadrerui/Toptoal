@@ -467,3 +467,39 @@ python scripts/evaluate_earthwork_alternatives.py \
   --design-profile data/interim/design_profile.json \
   --out-report outputs/reports/earthwork_alternatives_report.json
 ```
+
+## 22) Protótipo Etapa 1 (Dados e Terreno) em corredor ~50 km
+
+Para reduzir risco e calibrar custos rapidamente, foi incluído um corredor piloto de aproximadamente 50 km:
+
+- Polígono: `data/external/pilot_corridor_50km_sp.geojson`
+- Configuração: `configs/prototype_data_terrain_50km.json`
+- Orquestrador: `scripts/run_data_terrain_prototype.py`
+
+Execução recomendada (sem rede, para validar estrutura e estimar grade):
+
+```bash
+python scripts/run_data_terrain_prototype.py
+```
+
+Execução com download real de dados:
+
+```bash
+python scripts/run_data_terrain_prototype.py --run-download
+```
+
+O relatório gerado em `outputs/reports/data_terrain_prototype_50km.json` inclui:
+- bbox e dimensões estimadas do corredor,
+- tamanho efetivo da grade (`effective_grid_size_m = dem_resolution * stride`),
+- quantidade estimada de células de processamento.
+
+### Qual tamanho de grade estamos usando hoje?
+
+No modelo atual, o tamanho da grade é definido por:
+
+- `tamanho_grade_m = resolução_do_DEM * stride`
+- `stride` padrão em `build_grid_model.py` é **2**.
+
+Exemplo prático:
+- Com DEM de 30 m (COP30) e `stride=2`, a grade efetiva fica em **60 m**.
+- Com DEM de 5 m e `stride=2`, a grade efetiva fica em **10 m**.
