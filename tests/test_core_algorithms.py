@@ -7,6 +7,7 @@ from scripts import build_cost_surface
 from scripts import build_grid_model
 from scripts import evaluate_earthwork_alternatives
 from scripts import run_astar_graph
+from scripts import sweep_scenarios
 
 
 class TestCoreAlgorithms(unittest.TestCase):
@@ -33,6 +34,16 @@ class TestCoreAlgorithms(unittest.TestCase):
         path, total = run_astar_graph.astar_graph(nodes, edges, 0, 2)
         self.assertEqual(path, [0, 1, 2])
         self.assertAlmostEqual(total, 2.0)
+
+
+    def test_weighted_multiobjective_score(self):
+        weights = {
+            "route_total_cost": 0.5,
+            "mass_balance_imbalance_index": 0.3,
+            "water_crossing_length_m": 0.2,
+        }
+        score = sweep_scenarios._weighted_score(0.2, 0.4, 0.6, weights)
+        self.assertAlmostEqual(score, 0.34)
 
     def test_rank_earthwork(self):
         ev = [

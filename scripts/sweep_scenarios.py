@@ -15,6 +15,12 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+DEFAULT_WEIGHTS = {
+    "route_total_cost": 1.0,
+    "mass_balance_imbalance_index": 1.0,
+    "water_crossing_length_m": 1.0,
+}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Executa N cenários e ranqueia alternativas de parâmetros.")
@@ -44,12 +50,31 @@ def _normalize(values: list[float]) -> list[float]:
     return [(v - vmin) / (vmax - vmin) for v in values]
 
 
+def _resolve_weights(payload: dict) -> dict[str, float]:
+    weights = dict(DEFAULT_WEIGHTS)
+    weights.update(payload.get("weights", {}))
+    denom = sum(max(0.0, float(v)) for v in weights.values())
+    if denom <= 0:
+        return dict(DEFAULT_WEIGHTS)
+    return {k: max(0.0, float(v)) / denom for k, v in weights.items()}
+
+
+def _weighted_score(route: float, mass: float, water: float, weights: dict[str, float]) -> float:
+    return (
+        route * weights["route_total_cost"]
+        + mass * weights["mass_balance_imbalance_index"]
+        + water * weights["water_crossing_length_m"]
+    )
+
+
 def main() -> None:
-    scenarios_payload = _load_json(args.scenarios) if (args := parse_args()) else {}
+    args = parse_args()
+    scenarios_payload = _load_json(args.scenarios)
     scenarios = scenarios_payload.get("scenarios", [])
     if not scenarios:
         raise ValueError("Arquivo de cenários vazio.")
 
+    weights = _resolve_weights(scenarios_payload)
     base_params = _load_json(args.base_params)
     results = []
 
@@ -99,7 +124,7 @@ def main() -> None:
                     "--out",
                     str(grid_json),
                     "--stride",
-                    str(sc.get("stride", 2)),
+                    str(sc.get("stride", 15)),
                     "--vertical-penalty-factor",
                     str(sc.get("vertical_penalty_factor", 0.05)),
                 ],
@@ -146,13 +171,12 @@ def main() -> None:
     waters = _normalize([r["water_crossing_length_m"] for r in results])
 
     for i, r in enumerate(results):
-        # pesos iguais (pode evoluir para configurável)
-        score = (costs[i] + masses[i] + waters[i]) / 3.0
-        r["multiobjective_score"] = score
+        r["multiobjective_score"] = _weighted_score(costs[i], masses[i], waters[i], weights)
 
     ranked = sorted(results, key=lambda x: x["multiobjective_score"])
     out = {
         "objectives": ["route_total_cost", "mass_balance_imbalance_index", "water_crossing_length_m"],
+        "weights": weights,
         "results": results,
         "ranking": [r["id"] for r in ranked],
         "recommended": ranked[0]["id"] if ranked else None,

@@ -58,9 +58,13 @@ def astar_graph(
     open_heap: list[tuple[float, int]] = [(0.0, start_id)]
     came_from: dict[int, int] = {}
     g_score: dict[int, float] = {start_id: 0.0}
+    closed_set: set[int] = set()
 
     while open_heap:
         _, current = heapq.heappop(open_heap)
+
+        if current in closed_set:
+            continue
 
         if current == goal_id:
             path = [current]
@@ -70,7 +74,11 @@ def astar_graph(
             path.reverse()
             return path, g_score[goal_id]
 
+        closed_set.add(current)
+
         for neigh, weight in adj.get(current, []):
+            if neigh in closed_set:
+                continue
             tentative = g_score[current] + weight
             if tentative < g_score.get(neigh, float("inf")):
                 came_from[neigh] = current

@@ -413,6 +413,8 @@ Objetivos do ranking:
 - índice de equilíbrio de massas,
 - extensão estimada em água/ponte.
 
+Os pesos são configuráveis no topo de `configs/scenarios_example.json` (`weights`).
+
 Arquivo de exemplo: `configs/scenarios_example.json`.
 
 ```bash
@@ -520,3 +522,5 @@ python scripts/download_osm_dem.py \
 ```
 
 Troque para `30` ou `90` para comparar velocidade/nível de detalhe e calibrar o modelo.
+
+Observação: neste fluxo `globaldem`, quando `--dem-resolution-m 15` é usado, o script registra aviso e utiliza `COP30` como aproximação.

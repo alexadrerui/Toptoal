@@ -28,6 +28,12 @@ SUPPORTED_DEM_RESOLUTIONS = {
     "90": "SRTMGL3",
 }
 
+DEM_RESOLUTION_NOTES = {
+    "15": "OpenTopography globaldem não garante 15m global; usando demtype COP30 como aproximação.",
+    "30": "Resolução alvo compatível com COP30/SRTMGL1.",
+    "90": "Resolução alvo compatível com SRTMGL3.",
+}
+
 
 def _resolve_dem_type(dem_type: str | None, dem_resolution_m: int | None) -> tuple[str, int | None]:
     if dem_resolution_m is not None:
@@ -237,6 +243,8 @@ def main() -> None:
 
     resolved_dem_type, resolved_resolution = _resolve_dem_type(args.dem_type, args.dem_resolution_m)
 
+    resolution_note = DEM_RESOLUTION_NOTES.get(str(args.dem_resolution_m)) if args.dem_resolution_m is not None else None
+
     metadata = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "polygon_source": str(args.polygon),
@@ -244,9 +252,13 @@ def main() -> None:
         "dem_type": resolved_dem_type,
         "dem_resolution_m": resolved_resolution,
         "supported_dem_resolutions_m": [15, 30, 90],
+        "dem_resolution_note": resolution_note,
     }
     _write_json(meta_dir / "request_metadata.json", metadata)
     _write_json(meta_dir / "input_polygon.geojson", {"type": "Feature", "properties": {}, "geometry": geometry})
+
+    if args.dem_resolution_m == 15:
+        print("[aviso] 15m solicitado: será usado COP30 como aproximação neste fluxo globaldem.")
 
     if args.dry_run:
         print("[dry-run] BBOX:", metadata["bbox"])
