@@ -1,0 +1,24 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "corredor_50km_sp",
+        "name": "Corredor piloto ~50 km (SP)"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-46.8200, -23.6500],
+            [-46.3200, -23.6500],
+            [-46.3200, -23.5000],
+            [-46.8200, -23.5000],
+            [-46.8200, -23.6500]
+          ]
+        ]
+      }
+    }
+  ]
+}
