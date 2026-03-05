@@ -524,3 +524,41 @@ python scripts/download_osm_dem.py \
 Troque para `30` ou `90` para comparar velocidade/nível de detalhe e calibrar o modelo.
 
 Observação: neste fluxo `globaldem`, quando `--dem-resolution-m 15` é usado, o script registra aviso e utiliza `COP30` como aproximação.
+
+## 23) Backend FastAPI mínimo (3 endpoints)
+
+Foi adicionado um backend mínimo em `src/api/main.py` com os endpoints:
+
+- `GET /health`
+- `POST /ingest/dry-run`
+- `POST /route/graph`
+
+### Subir local em 1 comando
+
+```bash
+pip install -r requirements.txt && uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### Exemplos de uso
+
+Health:
+
+```bash
+curl http://localhost:8000/health
+```
+
+Ingest dry-run:
+
+```bash
+curl -X POST http://localhost:8000/ingest/dry-run \
+  -H 'Content-Type: application/json' \
+  -d '{"polygon_path":"data/external/pilot_corridor_50km_sp.geojson","dem_resolution_m":30}'
+```
+
+Route graph:
+
+```bash
+curl -X POST http://localhost:8000/route/graph \
+  -H 'Content-Type: application/json' \
+  -d '{"grid_model_path":"data/interim/grid_model.json","start_lon":-46.665,"start_lat":-23.575,"end_lon":-46.625,"end_lat":-23.535}'
+```
