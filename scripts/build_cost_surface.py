@@ -35,52 +35,37 @@ except ImportError:  # pragma: no cover
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Monta raster de custo de superfície e relatório de massas.")
     parser.add_argument("--dem", required=True, type=Path, help="DEM recortado (GeoTIFF).")
-    parser.add_argument("--osm-geojson", required=True, type=Path, help="GeoJSON OSM filtrado por polígono.")
-    parser.add_argument("--cost-out", type=Path, default=Path("data/interim/cost_surface.tif"), help="Saída raster de custo.")
+    parser.add_argument(
+        "--osm-geojson",
+        required=True,
+        type=Path,
+        help="GeoJSON OSM com feições filtradas por polígono.",
+    )
+    parser.add_argument(
+        "--cost-out",
+        type=Path,
+        default=Path("data/interim/cost_surface.tif"),
+        help="Saída do raster de custo.",
+    )
     parser.add_argument(
         "--report-out",
         type=Path,
         default=Path("data/interim/cost_surface_report.json"),
-        help="Relatório JSON com estatísticas e equilíbrio de massas.",
-    )
-    parser.add_argument(
-        "--params",
-        type=Path,
-        default=Path("configs/cost_parameters.json"),
-        help="JSON de parâmetros de custo.",
+        help="Saída do relatório JSON.",
     )
     parser.add_argument(
         "--target-elevation",
         type=float,
         default=None,
-        help="Cota de referência para equilíbrio de massas. Se omitida, usa mediana do DEM.",
-    )
-    parser.add_argument(
-        "--qaqc-report",
-        type=Path,
-        default=None,
-        help="Relatório QA/QC (JSON). Se informado e status=fail, interrompe execução.",
+        help="Cota de referência para equilíbrio de massas. Se omitido, usa mediana do DEM.",
     )
     return parser.parse_args()
 
 
-def _load_params(path: Path) -> dict[str, float]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    return {
-        "terrain_cost_flat": float(payload.get("terrain_cost_flat", 1)),
-        "terrain_cost_steep": float(payload.get("terrain_cost_steep_gt_30_percent", 10)),
-        "building_cost": float(payload.get("building_cost", 10)),
-        "water_cost": float(payload.get("water_cost", 15)),
-        "existing_road_cost": float(payload.get("existing_road_cost", 0.6)),
-    }
-
-
-def _load_osm_shapes(path: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+def _load_osm_building_shapes(path: Path) -> list[dict[str, Any]]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     features = payload.get("features", [])
     building_shapes: list[dict[str, Any]] = []
-    water_shapes: list[dict[str, Any]] = []
-    road_shapes: list[dict[str, Any]] = []
 
     for feature in features:
         props = feature.get("properties", {})
@@ -88,26 +73,15 @@ def _load_osm_shapes(path: Path) -> tuple[list[dict[str, Any]], list[dict[str, A
         if not geom:
             continue
 
-        geom_type = geom.get("type")
+        has_building = "building" in props
+        is_residential = props.get("building") == "residential" or props.get("landuse") == "residential"
+        if not (has_building or is_residential):
+            continue
 
-        has_building = "building" in props or props.get("landuse") == "residential"
-        if has_building and geom_type in {"Polygon", "MultiPolygon"}:
+        if geom.get("type") == "Polygon":
             building_shapes.append(geom)
 
-        is_water = (
-            "waterway" in props
-            or props.get("natural") == "water"
-            or props.get("landuse") == "reservoir"
-            or props.get("water") is not None
-        )
-        if is_water and geom_type in {"Polygon", "MultiPolygon", "LineString", "MultiLineString"}:
-            water_shapes.append(geom)
-
-        is_road = "highway" in props
-        if is_road and geom_type in {"LineString", "MultiLineString", "Polygon", "MultiPolygon"}:
-            road_shapes.append(geom)
-
-    return building_shapes, water_shapes, road_shapes
+    return building_shapes
 
 
 def _compute_slope_percent(dem: np.ndarray, transform: Any) -> np.ndarray:
@@ -117,7 +91,8 @@ def _compute_slope_percent(dem: np.ndarray, transform: Any) -> np.ndarray:
         raise ValueError("Resolução espacial inválida no raster.")
 
     dz_dy, dz_dx = np.gradient(dem, yres, xres)
-    return np.sqrt(dz_dx**2 + dz_dy**2) * 100.0
+    slope_percent = np.sqrt(dz_dx**2 + dz_dy**2) * 100.0
+    return slope_percent
 
 
 def _mass_balance_metrics(dem: np.ndarray, nodata_mask: np.ndarray, target_elevation: float) -> dict[str, float]:
@@ -126,7 +101,14 @@ def _mass_balance_metrics(dem: np.ndarray, nodata_mask: np.ndarray, target_eleva
 
     cut = float(np.sum(np.clip(diff, 0, None)))
     fill = float(np.sum(np.clip(-diff, 0, None)))
-    ratio = 1.0 if (fill == 0 and cut == 0) else (float("inf") if fill == 0 else cut / fill)
+
+    if fill == 0.0 and cut == 0.0:
+        ratio = 1.0
+    elif fill == 0.0:
+        ratio = float("inf")
+    else:
+        ratio = cut / fill
+
     imbalance = 0.0 if (cut + fill) == 0 else abs(cut - fill) / (cut + fill)
 
     return {
@@ -138,12 +120,6 @@ def _mass_balance_metrics(dem: np.ndarray, nodata_mask: np.ndarray, target_eleva
     }
 
 
-def _raster_mask(shapes: list[dict[str, Any]], out_shape: tuple[int, int], transform: Any) -> np.ndarray:
-    if not shapes:
-        return np.zeros(out_shape, dtype="uint8")
-    return rasterize([(shape, 1) for shape in shapes], out_shape=out_shape, transform=transform, fill=0, dtype="uint8")
-
-
 def main() -> None:
     args = parse_args()
 
@@ -151,13 +127,6 @@ def main() -> None:
         raise RuntimeError("numpy não está instalado. Instale para gerar custo de superfície.")
     if rasterio is None or rasterize is None:
         raise RuntimeError("rasterio não está instalado. Instale para gerar custo de superfície.")
-
-    params = _load_params(args.params)
-
-    if args.qaqc_report is not None:
-        qaqc = json.loads(args.qaqc_report.read_text(encoding="utf-8"))
-        if qaqc.get("overall_status") == "fail":
-            raise RuntimeError("QA/QC com status FAIL. Corrija os insumos antes de gerar custo.")
 
     with rasterio.open(args.dem) as src:
         dem_masked = src.read(1, masked=True)
@@ -168,36 +137,32 @@ def main() -> None:
     nodata_mask = np.isnan(dem)
     slope_percent = _compute_slope_percent(np.nan_to_num(dem, nan=0.0), transform)
 
-    # Custo base de terreno por declividade.
-    cost = np.where(slope_percent > 30.0, params["terrain_cost_steep"], params["terrain_cost_flat"]).astype(np.float32)
+    # Regra solicitada para declividade.
+    cost = np.where(slope_percent > 30.0, 10.0, 1.0).astype(np.float32)
     cost[nodata_mask] = np.nan
 
-    building_shapes, water_shapes, road_shapes = _load_osm_shapes(args.osm_geojson)
-    building_mask = _raster_mask(building_shapes, cost.shape, transform)
-    water_mask = _raster_mask(water_shapes, cost.shape, transform)
-    road_mask = _raster_mask(road_shapes, cost.shape, transform)
-
-    # Prioridade de decisão: desviar da água, mas ainda permitir ponte se vantajoso.
-    cost = np.where(water_mask == 1, params["water_cost"], cost)
-
-    # Construções continuam com alta penalidade.
-    cost = np.where(building_mask == 1, params["building_cost"], cost)
-
-    # Prioriza vias existentes (menor custo), sem sobrescrever água/construções.
-    road_priority_mask = (road_mask == 1) & (water_mask == 0) & (building_mask == 0)
-    cost = np.where(road_priority_mask, np.minimum(cost, params["existing_road_cost"]), cost)
-    cost[nodata_mask] = np.nan
+    # Penaliza construções/residências com custo 10.
+    building_shapes = _load_osm_building_shapes(args.osm_geojson)
+    building_count = len(building_shapes)
+    if building_shapes:
+        building_mask = rasterize(
+            [(shape, 1) for shape in building_shapes],
+            out_shape=cost.shape,
+            transform=transform,
+            fill=0,
+            dtype="uint8",
+        )
+        cost = np.where(building_mask == 1, 10.0, cost)
 
     valid_slope = slope_percent[~nodata_mask]
     high_slope_cells = int(np.sum(valid_slope > 30.0))
     low_slope_cells = int(np.sum(valid_slope <= 30.0))
 
-    water_cells = int(np.sum((water_mask == 1) & (~nodata_mask)))
-    building_cells = int(np.sum((building_mask == 1) & (~nodata_mask)))
-    road_cells = int(np.sum((road_mask == 1) & (~nodata_mask)))
-    prioritized_road_cells = int(np.sum(road_priority_mask & (~nodata_mask)))
+    if args.target_elevation is None:
+        target_elevation = float(np.nanmedian(dem))
+    else:
+        target_elevation = float(args.target_elevation)
 
-    target_elevation = float(np.nanmedian(dem)) if args.target_elevation is None else float(args.target_elevation)
     mass_balance = _mass_balance_metrics(dem, nodata_mask, target_elevation)
 
     args.cost_out.parent.mkdir(parents=True, exist_ok=True)
@@ -212,26 +177,14 @@ def main() -> None:
 
     report = {
         "rules": {
-            "slope_lte_30_percent": params["terrain_cost_flat"],
-            "slope_gt_30_percent": params["terrain_cost_steep"],
-            "building_or_residential": params["building_cost"],
-            "water": params["water_cost"],
-            "existing_road": params["existing_road_cost"],
-        },
-        "bridge_logic": {
-            "water_cell_equivalence": "1 célula de água (5m) ~ 15 células de terra plana (75m)",
-            "decision_note": "A* escolhe ponte quando o desvio terrestre acumulado ultrapassa custo equivalente da travessia aquática.",
+            "slope_lte_30_percent": 1,
+            "slope_gt_30_percent": 10,
+            "building_or_residential": 10,
         },
         "stats": {
             "low_slope_cells": low_slope_cells,
             "high_slope_cells": high_slope_cells,
-            "building_shapes_count": len(building_shapes),
-            "water_shapes_count": len(water_shapes),
-            "road_shapes_count": len(road_shapes),
-            "building_cells": building_cells,
-            "water_cells": water_cells,
-            "road_cells": road_cells,
-            "prioritized_road_cells": prioritized_road_cells,
+            "building_shapes_count": building_count,
         },
         "mass_balance": mass_balance,
     }

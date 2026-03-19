@@ -131,28 +131,13 @@ Script: `scripts/download_osm_dem.py`
 ### Comandos
 
 ```bash
-python scripts/download_osm_dem.py   --polygon data/external/area.geojson   --out-dir data/raw   --dem-type COP30   --dem-resolution-m 30   --opentopo-api-key "SUA_CHAVE"
+python scripts/download_osm_dem.py   --polygon data/external/area.geojson   --out-dir data/raw   --dem-type COP30   --opentopo-api-key "SUA_CHAVE"
 ```
 
 Somente OSM:
 
 ```bash
 python scripts/download_osm_dem.py --polygon data/external/area.geojson --skip-dem
-```
-
-Somente DEM (útil quando Overpass estiver indisponível):
-
-Resoluções suportadas no OpenTopography neste projeto: **15m, 30m e 90m** (via `--dem-resolution-m`).
-
-```bash
-python scripts/download_osm_dem.py --polygon data/external/area.geojson --skip-osm --dem-resolution-m 15 --opentopo-api-key "SUA_CHAVE"
-```
-
-Também é possível usar variável de ambiente para a chave:
-
-```bash
-export OPENTOPO_API_KEY="SUA_CHAVE"
-python scripts/download_osm_dem.py --polygon data/external/area.geojson --skip-osm
 ```
 
 Dry-run (sem rede):
@@ -168,22 +153,18 @@ python scripts/download_osm_dem.py --polygon data/external/area.geojson --dry-ru
 - `data/raw/dem/dem_clipped_polygon.tif`
 - `data/raw/metadata/request_metadata.json`
 
-## 10) Estrutura em memória para o algoritmo: grade 15x15
+## 10) Estrutura em memória para o algoritmo: grade 2x2
 
 Sim — dividir a área em grade de pequenos quadrados é uma estratégia muito prática para iniciar o cálculo de rota.
 
 Script: `scripts/build_grid_model.py`
 
-- Entrada: `dem_clipped_polygon.tif` + opcionalmente `cost_surface.tif`.
-- Saída: JSON com:
-  - nós (`id`, linha/coluna, coordenada, elevação, custo-base opcional),
-  - arestas 8-direções com custo de movimento.
-- Custo de aresta:
-  - `horizontal_distance_m * thematic_cost_mean + vertical_penalty_factor * vertical_delta_m`
-- `--stride 15` representa amostragem em blocos 15x15 para reduzir volume inicial.
+- Entrada: `dem_clipped_polygon.tif`
+- Saída: JSON com células da grade (`id`, linha/coluna, coordenada, elevação).
+- `--stride 2` representa amostragem em blocos 2x2 para reduzir volume inicial.
 
 ```bash
-python scripts/build_grid_model.py   --dem data/raw/dem/dem_clipped_polygon.tif   --cost-raster data/interim/cost_surface.tif   --out data/interim/grid_model.json   --stride 15   --vertical-penalty-factor 0.05
+python scripts/build_grid_model.py   --dem data/raw/dem/dem_clipped_polygon.tif   --out data/interim/grid_model.json   --stride 2
 ```
 
 
@@ -257,7 +238,7 @@ python scripts/build_cost_surface.py \
 python scripts/build_grid_model.py \
   --dem data/raw/dem/dem_clipped_polygon.tif \
   --out data/interim/grid_model.json \
-  --stride 15
+  --stride 2
 ```
 
 ### Criar outra área piloto rapidamente
@@ -267,298 +248,4 @@ python scripts/create_pilot_area.py \
   --name piloto_nova \
   --west -46.70 --south -23.60 --east -46.60 --north -23.50 \
   --out data/external/pilot_area_nova.geojson
-```
-
-## 13) Otimização da função de custo para água (ponte vs contorno)
-
-A lógica de projetista foi incorporada à função de custo:
-- **Desviar** da água é a prioridade padrão.
-- **Atravessar** (ponte) continua permitido quando o contorno fica caro demais.
-
-### Regra matemática implementada
-- Terra plana (<=30%): custo `1`.
-- Água (rios/lagos): custo `15`.
-- Vias existentes (`highway`): custo reduzido (padrão `0.6`) para priorizar reaproveitamento do corredor já implantado.
-
-Com grade de 5m, isso representa:
-- 1 célula de água (5m) ~ 15 células de terra plana (75m).
-
-Ou seja, o A* vai preferir contorno curto, mas escolherá ponte quando o desvio em terra ultrapassar aproximadamente essa equivalência de custo.
-Além disso, quando houver corredor viário existente em terra, o custo menor desse corredor tende a puxar o traçado para reutilização de infraestrutura.
-
-### Configuração de parâmetros
-Arquivo: `configs/cost_parameters.json`.
-
-### Gerar custo de superfície com água
-
-```bash
-python scripts/build_cost_surface.py \
-  --dem data/raw/dem/dem_clipped_polygon.tif \
-  --osm-geojson data/raw/osm/osm_features.geojson \
-  --params configs/cost_parameters.json \
-  --cost-out data/interim/cost_surface.tif \
-  --report-out data/interim/cost_surface_report.json
-```
-
-## 14) A* sobre raster de custo
-
-Script: `scripts/run_astar_cost_raster.py`
-
-Exemplo:
-
-```bash
-python scripts/run_astar_cost_raster.py \
-  --cost-raster data/interim/cost_surface.tif \
-  --start-lon -46.665 --start-lat -23.575 \
-  --end-lon -46.625 --end-lat -23.535 \
-  --out outputs/reports/astar_path.json
-```
-
-## 15) Corte/aterro por alternativas de eixo com seção parametrizada
-
-Script: `scripts/evaluate_earthwork_alternatives.py`
-
-Essa etapa calcula corte/aterro ao longo de múltiplas alternativas de eixo (`LineString`) usando seção transversal parametrizada:
-- largura de plataforma (`platform_width_m`),
-- espessura de pavimento (`pavement_thickness_m`),
-- talude de corte (`side_slope_cut_hv`) e aterro (`side_slope_fill_hv`),
-- passo de estaqueamento (`station_step_m`).
-
-### Arquivos de apoio
-- Parâmetros: `configs/cross_section_parameters.json`
-- Exemplo de alternativas: `data/external/axis_alternatives_example.geojson`
-
-### Execução
-
-```bash
-python scripts/evaluate_earthwork_alternatives.py \
-  --dem data/raw/dem/dem_clipped_polygon.tif \
-  --axes-geojson data/external/axis_alternatives_example.geojson \
-  --params configs/cross_section_parameters.json \
-  --out-report outputs/reports/earthwork_alternatives_report.json
-```
-
-### Saída
-O relatório inclui, para cada alternativa:
-- `estimated_cut_volume_m3`
-- `estimated_fill_volume_m3`
-- `cut_fill_ratio`
-- `mass_balance_imbalance_index`
-- ranking por melhor equilíbrio de massas.
-
-## 16) Etapa de QA/QC antes da superfície de custo
-
-Script: `scripts/qaqc_inputs.py`
-
-Essa etapa valida os insumos antes de gerar custo:
-- DEM: proporção de NoData, CRS projetado (opcional), células quadradas.
-- OSM GeoJSON: contagem de feições, presença de camadas (edificações/água/vias), geometrias inválidas.
-
-### Execução QA/QC
-
-```bash
-python scripts/qaqc_inputs.py \
-  --dem data/raw/dem/dem_clipped_polygon.tif \
-  --osm-geojson data/raw/osm/osm_features.geojson \
-  --max-dem-nodata-ratio 0.15 \
-  --require-projected-crs \
-  --out-report outputs/reports/qaqc_report.json
-```
-
-### Integrar QA/QC na geração de custo
-
-```bash
-python scripts/build_cost_surface.py \
-  --dem data/raw/dem/dem_clipped_polygon.tif \
-  --osm-geojson data/raw/osm/osm_features.geojson \
-  --params configs/cost_parameters.json \
-  --qaqc-report outputs/reports/qaqc_report.json \
-  --cost-out data/interim/cost_surface.tif \
-  --report-out data/interim/cost_surface_report.json
-```
-
-Se `overall_status = fail`, a geração de custo é interrompida até correção dos insumos.
-
-## 17) A* ligado ao grafo de arestas (grid_model.json)
-
-Script: `scripts/run_astar_graph.py`
-
-Agora o A* pode usar diretamente o grafo gerado em `build_grid_model.py` (`cells + edges`), em vez de operar só no raster.
-
-```bash
-python scripts/run_astar_graph.py \
-  --grid-model data/interim/grid_model.json \
-  --start-lon -46.665 --start-lat -23.575 \
-  --end-lon -46.625 --end-lat -23.535 \
-  --out outputs/reports/astar_graph_path.json
-```
-
-### Comparar A* raster vs A* grafo
-
-Script: `scripts/compare_astar_modes.py`
-
-```bash
-python scripts/compare_astar_modes.py \
-  --raster-report outputs/reports/astar_path.json \
-  --graph-report outputs/reports/astar_graph_path.json \
-  --out outputs/reports/astar_compare_report.json
-```
-
-## 18) Varredura de cenários e ranking multiobjetivo
-
-Script: `scripts/sweep_scenarios.py`
-
-Objetivos do ranking:
-- custo total da rota,
-- índice de equilíbrio de massas,
-- extensão estimada em água/ponte.
-
-Os pesos são configuráveis no topo de `configs/scenarios_example.json` (`weights`).
-
-Arquivo de exemplo: `configs/scenarios_example.json`.
-
-```bash
-python scripts/sweep_scenarios.py \
-  --scenarios configs/scenarios_example.json \
-  --dem data/raw/dem/dem_clipped_polygon.tif \
-  --osm-geojson data/raw/osm/osm_features.geojson \
-  --start-lon -46.665 --start-lat -23.575 \
-  --end-lon -46.625 --end-lat -23.535 \
-  --out-report outputs/reports/scenario_sweep_report.json
-```
-
-## 19) Regras configuráveis de aceitação QA/QC
-
-Arquivo: `configs/qaqc_thresholds.json`.
-
-Principais regras:
-- `max_dem_nodata_ratio`,
-- `require_projected_crs`,
-- `min_osm_feature_count`,
-- `max_invalid_geometry_ratio`,
-- `require_thematic_layers` (vias/água/edificações).
-
-```bash
-python scripts/qaqc_inputs.py \
-  --dem data/raw/dem/dem_clipped_polygon.tif \
-  --osm-geojson data/raw/osm/osm_features.geojson \
-  --thresholds configs/qaqc_thresholds.json \
-  --out-report outputs/reports/qaqc_report.json
-```
-
-## 20) Separar perfil de projeto (greide) antes de corte/aterro
-
-Script novo: `scripts/build_design_profile.py`.
-
-Esse passo gera cotas de projeto por estação e alternativa, para depois usar em `evaluate_earthwork_alternatives.py`.
-
-```bash
-python scripts/build_design_profile.py \
-  --axes-geojson data/external/axis_alternatives_example.geojson \
-  --station-step-m 20 \
-  --start-elevation 720 \
-  --grade-percent 0.5 \
-  --out data/interim/design_profile.json
-```
-
-Depois, avaliar terraplenagem com greide:
-
-```bash
-python scripts/evaluate_earthwork_alternatives.py \
-  --dem data/raw/dem/dem_clipped_polygon.tif \
-  --axes-geojson data/external/axis_alternatives_example.geojson \
-  --params configs/cross_section_parameters.json \
-  --design-profile data/interim/design_profile.json \
-  --out-report outputs/reports/earthwork_alternatives_report.json
-```
-
-## 22) Protótipo Etapa 1 (Dados e Terreno) em corredor ~50 km
-
-Para reduzir risco e calibrar custos rapidamente, foi incluído um corredor piloto de aproximadamente 50 km:
-
-- Polígono: `data/external/pilot_corridor_50km_sp.geojson`
-- Configuração: `configs/prototype_data_terrain_50km.json`
-- Orquestrador: `scripts/run_data_terrain_prototype.py`
-
-Execução recomendada (sem rede, para validar estrutura e estimar grade):
-
-```bash
-python scripts/run_data_terrain_prototype.py --dem-resolution-m 30
-```
-
-Execução com download real de dados:
-
-```bash
-python scripts/run_data_terrain_prototype.py --dem-resolution-m 30 --run-download
-```
-
-O relatório gerado em `outputs/reports/data_terrain_prototype_50km.json` inclui:
-- bbox e dimensões estimadas do corredor,
-- tamanho efetivo da grade (`effective_grid_size_m = dem_resolution * stride`),
-- quantidade estimada de células de processamento.
-
-### Qual tamanho de grade estamos usando hoje?
-
-No modelo atual, o tamanho da grade é definido por:
-
-- `tamanho_grade_m = resolução_do_DEM * stride`
-- resolução DEM selecionável: **15m / 30m / 90m** (`--dem-resolution-m`)
-- `stride` padrão em `build_grid_model.py` é **15**.
-
-Exemplo prático:
-- Com DEM de 30 m (COP30) e `stride=15`, a grade efetiva fica em **450 m**.
-- Com DEM de 15 m e `stride=15`, a grade efetiva fica em **225 m**.
-
-
-### Escolha de resolução (15m/30m/90m)
-
-No `download_osm_dem.py`, você pode escolher explicitamente a resolução:
-
-```bash
-python scripts/download_osm_dem.py \
-  --polygon data/external/pilot_corridor_50km_sp.geojson \
-  --dem-resolution-m 15 \
-  --opentopo-api-key "SUA_CHAVE"
-```
-
-Troque para `30` ou `90` para comparar velocidade/nível de detalhe e calibrar o modelo.
-
-Observação: neste fluxo `globaldem`, quando `--dem-resolution-m 15` é usado, o script registra aviso e utiliza `COP30` como aproximação.
-
-## 23) Backend FastAPI mínimo (3 endpoints)
-
-Foi adicionado um backend mínimo em `src/api/main.py` com os endpoints:
-
-- `GET /health`
-- `POST /ingest/dry-run`
-- `POST /route/graph`
-
-### Subir local em 1 comando
-
-```bash
-pip install -r requirements.txt && uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-### Exemplos de uso
-
-Health:
-
-```bash
-curl http://localhost:8000/health
-```
-
-Ingest dry-run:
-
-```bash
-curl -X POST http://localhost:8000/ingest/dry-run \
-  -H 'Content-Type: application/json' \
-  -d '{"polygon_path":"data/external/pilot_corridor_50km_sp.geojson","dem_resolution_m":30}'
-```
-
-Route graph:
-
-```bash
-curl -X POST http://localhost:8000/route/graph \
-  -H 'Content-Type: application/json' \
-  -d '{"grid_model_path":"data/interim/grid_model.json","start_lon":-46.665,"start_lat":-23.575,"end_lon":-46.625,"end_lat":-23.535}'
 ```
