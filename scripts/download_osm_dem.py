@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -20,36 +19,6 @@ from urllib.request import Request, urlopen
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 OPENTOPO_URL = "https://portal.opentopography.org/API/globaldem"
-
-
-SUPPORTED_DEM_RESOLUTIONS = {
-    "15": "COP30",
-    "30": "COP30",
-    "90": "SRTMGL3",
-}
-
-DEM_RESOLUTION_NOTES = {
-    "15": "OpenTopography globaldem não garante 15m global; usando demtype COP30 como aproximação.",
-    "30": "Resolução alvo compatível com COP30/SRTMGL1.",
-    "90": "Resolução alvo compatível com SRTMGL3.",
-}
-
-
-def _resolve_dem_type(dem_type: str | None, dem_resolution_m: int | None) -> tuple[str, int | None]:
-    if dem_resolution_m is not None:
-        if str(dem_resolution_m) not in SUPPORTED_DEM_RESOLUTIONS:
-            raise ValueError("--dem-resolution-m deve ser um destes valores: 15, 30, 90")
-        return SUPPORTED_DEM_RESOLUTIONS[str(dem_resolution_m)], int(dem_resolution_m)
-
-    chosen = (dem_type or "COP30").strip().upper()
-    aliases = {
-        "COP30": ("COP30", 30),
-        "SRTMGL1": ("SRTMGL1", 30),
-        "SRTMGL3": ("SRTMGL3", 90),
-    }
-    if chosen in aliases:
-        return aliases[chosen]
-    return chosen, None
 
 try:
     import rasterio
@@ -100,9 +69,6 @@ def _overpass_poly_string(geometry: dict[str, Any]) -> str:
         ring = geometry["coordinates"][0]
     else:
         ring = geometry["coordinates"][0][0]
-
-    if not ring:
-        raise ValueError("Polígono inválido: anel externo vazio.")
 
     return " ".join(f"{lat} {lon}" for lon, lat in ring)
 
@@ -222,11 +188,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Baixa OSM + DEM por polígono GeoJSON.")
     parser.add_argument("--polygon", required=True, type=Path, help="GeoJSON (Polygon/MultiPolygon).")
     parser.add_argument("--out-dir", type=Path, default=Path("data/raw"), help="Diretório base de saída.")
-    parser.add_argument("--dem-type", default="COP30", help="DEM OpenTopography (ex.: COP30, SRTMGL1, SRTMGL3).")
-    parser.add_argument("--dem-resolution-m", type=int, default=None, help="Escolha por resolução alvo: 15, 30 ou 90 metros.")
+    parser.add_argument("--dem-type", default="COP30", help="DEM OpenTopography (ex.: COP30, SRTMGL1).")
     parser.add_argument("--opentopo-api-key", default=None, help="API key do OpenTopography.")
     parser.add_argument("--skip-dem", action="store_true", help="Baixa apenas OSM.")
-    parser.add_argument("--skip-osm", action="store_true", help="Baixa apenas DEM.")
     parser.add_argument("--skip-dem-clip", action="store_true", help="Baixa DEM por bbox sem recorte por polígono.")
     parser.add_argument("--dry-run", action="store_true", help="Mostra bbox/query sem chamadas de rede.")
     return parser.parse_args()
@@ -244,24 +208,14 @@ def main() -> None:
     bbox = _geometry_bounds(geometry)
     query_preview = _build_overpass_poly_query(geometry)
 
-    resolved_dem_type, resolved_resolution = _resolve_dem_type(args.dem_type, args.dem_resolution_m)
-
-    resolution_note = DEM_RESOLUTION_NOTES.get(str(args.dem_resolution_m)) if args.dem_resolution_m is not None else None
-
     metadata = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "polygon_source": str(args.polygon),
         "bbox": {"west": bbox[0], "south": bbox[1], "east": bbox[2], "north": bbox[3]},
-        "dem_type": resolved_dem_type,
-        "dem_resolution_m": resolved_resolution,
-        "supported_dem_resolutions_m": [15, 30, 90],
-        "dem_resolution_note": resolution_note,
+        "dem_type": args.dem_type,
     }
     _write_json(meta_dir / "request_metadata.json", metadata)
     _write_json(meta_dir / "input_polygon.geojson", {"type": "Feature", "properties": {}, "geometry": geometry})
-
-    if args.dem_resolution_m == 15:
-        print("[aviso] 15m solicitado: será usado COP30 como aproximação neste fluxo globaldem.")
 
     if args.dry_run:
         print("[dry-run] BBOX:", metadata["bbox"])
@@ -269,27 +223,22 @@ def main() -> None:
         print("\n".join(query_preview.splitlines()[:12]))
         return
 
-    if args.skip_osm:
-        print("[1/2] OSM ignorado (--skip-osm).")
-    else:
-        print("[1/2] Filtrando OSM pelo polígono desenhado...")
-        osm_raw = fetch_osm_raw(geometry)
-        _write_json(osm_dir / "osm_features_raw.json", osm_raw)
-        _write_json(osm_dir / "osm_features.geojson", _elements_to_geojson(osm_raw.get("elements", [])))
+    print("[1/2] Filtrando OSM pelo polígono desenhado...")
+    osm_raw = fetch_osm_raw(geometry)
+    _write_json(osm_dir / "osm_features_raw.json", osm_raw)
+    _write_json(osm_dir / "osm_features.geojson", _elements_to_geojson(osm_raw.get("elements", [])))
 
     if args.skip_dem:
         print("[2/2] DEM ignorado (--skip-dem).")
         return
-
-    api_key = args.opentopo_api_key or os.getenv("OPENTOPO_API_KEY")
-    if not api_key:
-        raise ValueError("Informe --opentopo-api-key (ou OPENTOPO_API_KEY), ou use --skip-dem.")
+    if not args.opentopo_api_key:
+        raise ValueError("Informe --opentopo-api-key para baixar DEM, ou use --skip-dem.")
 
     dem_bbox = dem_dir / "dem_raw_bbox.tif"
     dem_clip = dem_dir / "dem_clipped_polygon.tif"
 
     print("[2/2] Baixando DEM por bbox...")
-    download_dem_bbox(bbox, dem_bbox, resolved_dem_type, api_key)
+    download_dem_bbox(bbox, dem_bbox, args.dem_type, args.opentopo_api_key)
 
     if args.skip_dem_clip:
         print("Recorte de DEM ignorado (--skip-dem-clip).")
