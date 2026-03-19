@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Gera custo de superfície e indicadores de equilíbrio de massas.
+"""Gera custo de superfície com lógica de terra, água e construções.
 
-Regras iniciais (simples e objetivas):
-- Declividade <= 30%  -> custo 1
-- Declividade > 30%   -> custo 10
-- Construções/residências -> custo 10 (penalidade máxima local)
+Regras base (Etapa 2):
+- Terra plana/baixa declividade (<= 30%): custo 1
+- Terra com declividade > 30%: custo 10
+- Construções/residências: custo 10
+- Água (rios/lagos/reservatórios): custo 15
+- Vias existentes (highway): custo reduzido (prioridade de reaproveitamento)
 
-Além disso, calcula um indicador simplificado de equilíbrio de massas
-(corte vs aterro) para apoiar decisões de traçado.
+A água não é barreira infinita: isso permite ao A* avaliar ponte (atravessar)
+versus contorno (desviar) pela menor soma de custo total.
 """
 
 from __future__ import annotations
