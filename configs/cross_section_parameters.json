@@ -1,0 +1,10 @@
+{
+  "description": "Parâmetros da seção transversal para estimativa preliminar de corte/aterro.",
+  "platform_width_m": 12.0,
+  "pavement_thickness_m": 0.25,
+  "side_slope_cut_hv": 1.5,
+  "side_slope_fill_hv": 2.0,
+  "station_step_m": 20.0,
+  "cross_section_half_width_m": 30.0,
+  "sample_spacing_m": 2.5
+}

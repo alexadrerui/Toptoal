@@ -1,0 +1,14 @@
+{
+  "description": "Parâmetros iniciais de custo para Etapa 2 (A* com ponte vs contorno).",
+  "grid_resolution_m": 5,
+  "terrain_cost_flat": 1,
+  "terrain_cost_steep_gt_30_percent": 10,
+  "building_cost": 10,
+  "water_cost": 15,
+  "existing_road_cost": 0.6,
+  "bridge_equivalence": {
+    "water_cell_m": 5,
+    "equivalent_flat_land_cells": 15,
+    "equivalent_flat_land_distance_m": 75
+  }
+}
